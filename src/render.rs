@@ -4,27 +4,27 @@ use crate::term::Term;
 use std::io::{self, Write};
 use std::path::Path;
 
-pub struct Renderer<T> {
+pub struct Renderer<'a, T> {
     output: T,
     term: Term,
-    max_height: u32,
+    args: &'a crate::Args,
     row_height: u32,
     row_offset_x: u32,
 }
 
-impl Renderer<()> {
-    pub fn new(term: Term, max_height: u32) -> Renderer<impl Write> {
+impl<'a> Renderer<'a, ()> {
+    pub fn new(term: Term, args: &'a crate::Args) -> Renderer<'a, impl Write> {
         let stdout = std::io::BufWriter::new(std::io::stdout().lock());
-        Renderer::new_with_output(stdout, term, max_height)
+        Renderer::new_with_output(stdout, term, args)
     }
 }
 
-impl<T: Write> Renderer<T> {
-    pub fn new_with_output(output: T, term: Term, max_height: u32) -> Self {
+impl<'a, T: Write> Renderer<'a, T> {
+    pub fn new_with_output(output: T, term: Term, args: &'a crate::Args) -> Self {
         Renderer {
             output,
             term,
-            max_height,
+            args,
             row_height: 0,
             row_offset_x: 0,
         }
@@ -44,7 +44,17 @@ impl<T: Write> Renderer<T> {
         }
 
         // Hyperlink to the path.
-        write!(&mut self.output, "\x1B]8;;{}\x07", path.display())?;
+        if !self.args.no_hyperlinks {
+            write!(
+                &mut self.output,
+                "\x1B[38;2;{};{};{}m",
+                self.args.hyperlink_color[0],
+                self.args.hyperlink_color[1],
+                self.args.hyperlink_color[2]
+            )?;
+
+            write!(&mut self.output, "\x1B]8;;{}\x07", path.display())?;
+        }
 
         // Send the thumbnail using iTerm2 protocol.
         self.output.write_all(b"\x1B]1337;File=inline=1:")?;
@@ -55,7 +65,11 @@ impl<T: Write> Renderer<T> {
         drop(b64);
 
         // Finish both image and hyperlink.
-        self.output.write_all(b"\x07\x1B]8;;\x07")?;
+        self.output.write_all(b"\x07")?;
+
+        if !self.args.no_hyperlinks {
+            self.output.write_all(b"\x1B]8;;\x07\x1B[m")?;
+        }
 
         // Update row position.
 
@@ -70,16 +84,16 @@ impl<T: Write> Renderer<T> {
 
     fn start_row(&mut self) -> io::Result<()> {
         if self.row_height > 0 {
-            write!(&mut self.output, "\x1B8\x1B[{}B", self.max_height)?;
+            write!(&mut self.output, "\x1B8\x1B[{}B", self.args.thumbnail_size)?;
         }
 
         self.row_offset_x = 0;
         self.row_height = 0;
 
-        for _ in 0..=self.max_height {
+        for _ in 0..=self.args.thumbnail_size {
             self.output.write_all(b"\n")?;
         }
 
-        write!(&mut self.output, "\x1B[{}A\x1B7", self.max_height)
+        write!(&mut self.output, "\x1B[{}A\x1B7", self.args.thumbnail_size)
     }
 }

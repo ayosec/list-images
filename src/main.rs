@@ -2,10 +2,39 @@ mod images;
 mod render;
 mod term;
 
+use clap::Parser;
 use images::Thumbnail;
+
 use std::path::PathBuf;
 
-const THUMBNAIL_SIZE: u32 = 5;
+#[derive(Parser)]
+pub struct Args {
+    /// Size, in cells, of the thumbnail.
+    #[clap(short, long, default_value_t = 5)]
+    thumbnail_size: u32,
+
+    /// Don't add hyperlinks to every image.
+    #[clap(short = 'N', long)]
+    no_hyperlinks: bool,
+
+    /// Images to render.
+    images: Vec<PathBuf>,
+
+    /// Color to set foreground for hyperlinks.
+    #[clap(short = 'c', long, value_parser = parse_color, default_value = "FF7700")]
+    hyperlink_color: [u8; 3],
+}
+
+fn parse_color(value: &str) -> Result<[u8; 3], &'static str> {
+    if value.len() == 6 {
+        if let Ok(v) = u32::from_str_radix(value, 16) {
+            let v = v.to_be_bytes();
+            return Ok([v[1], v[2], v[3]]);
+        }
+    }
+
+    Err("Expected RRGGBB in hexadecimal digits.")
+}
 
 struct Job {
     path: PathBuf,
@@ -13,6 +42,8 @@ struct Job {
 }
 
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
     let term = term::Term::new()?;
 
     // Launch multiple threads to create the thumbnails.
@@ -25,16 +56,17 @@ fn main() -> anyhow::Result<()> {
             while let Ok(job) = rx.recv() {
                 let thumbnail = images::thumbnail(
                     &job.path,
-                    term.cell_height * THUMBNAIL_SIZE,
-                    term.cell_width * THUMBNAIL_SIZE * 2,
+                    term.cell_height * args.thumbnail_size,
+                    term.cell_width * args.thumbnail_size * 2,
                 );
                 job.tx.send((job.path, thumbnail)).unwrap();
             }
         });
     }
 
-    let jobs: Vec<_> = std::env::args_os()
-        .skip(1)
+    let jobs: Vec<_> = args
+        .images
+        .iter()
         .map(|file| {
             let path = PathBuf::from(file);
             let path = path.canonicalize().unwrap_or(path);
@@ -49,7 +81,7 @@ fn main() -> anyhow::Result<()> {
     // Collect results from the threads.
 
     let mut failed = Vec::new();
-    let mut renderer = render::Renderer::new(term, THUMBNAIL_SIZE);
+    let mut renderer = render::Renderer::new(term, &args);
 
     for job in jobs {
         let (path, thumbnail) = job.recv()?;
