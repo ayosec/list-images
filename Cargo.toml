@@ -1,7 +1,11 @@
 [package]
 name = "list-images"
 version = "0.1.0"
+authors = [ "ayosec@gmail.com" ]
+license = "Apache-2.0"
 edition = "2021"
+description = "A CLI program to show images in a terminal, using the iTerm2 image protocol."
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.59"
