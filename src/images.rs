@@ -1,22 +1,19 @@
 use image::{DynamicImage, RgbImage};
-use std::ops::Deref;
 use std::path::Path;
 use turbojpeg::Subsamp;
 
 /// Load an image from a file and returns the contents of a thumbnail.
-pub fn thumbnail<P: AsRef<Path>>(
-    path: &P,
-    height: u32,
-    width: u32,
-) -> anyhow::Result<impl Deref<Target = [u8]>> {
+pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::Result<Vec<u8>> {
     let image = load_file(path)?;
 
     let thumbnail = DynamicImage::ImageRgb8(image).thumbnail(height, width);
-    Ok(turbojpeg::compress_image(
+    let buf = turbojpeg::compress_image(
         thumbnail.as_rgb8().expect("thumbnail must be ImageRgb8"),
         90,
         Subsamp::None,
-    )?)
+    )?;
+
+    Ok(buf.as_ref().into())
 }
 
 fn load_file<P: AsRef<Path>>(path: &P) -> anyhow::Result<RgbImage> {

@@ -311,8 +311,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
+ "crossbeam-channel",
  "image",
  "nix",
+ "num_cpus",
  "turbojpeg",
 ]
 

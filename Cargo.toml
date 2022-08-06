@@ -6,8 +6,10 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.59"
 base64 = "0.13.0"
+crossbeam-channel = "0.5.6"
 image = "0.24.3"
 nix = { version = "0.24.2", default-features = false, features = ["term", "fs"] }
+num_cpus = "1.13.1"
 turbojpeg = { version = "0.5.0", features = ["image"] }
 
 [profile.release]
