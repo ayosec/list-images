@@ -1,15 +1,19 @@
 mod images;
+mod render;
 mod term;
 
+use images::Thumbnail;
 use std::path::PathBuf;
+
+const THUMBNAIL_SIZE: u32 = 5;
 
 struct Job {
     file: PathBuf,
-    tx: crossbeam_channel::Sender<(PathBuf, anyhow::Result<Vec<u8>>)>,
+    tx: crossbeam_channel::Sender<(PathBuf, anyhow::Result<Thumbnail>)>,
 }
 
-fn main() {
-    let cell_size = term::cell_size();
+fn main() -> anyhow::Result<()> {
+    let term = term::Term::new()?;
 
     // Launch multiple threads to create the thumbnails.
 
@@ -19,8 +23,11 @@ fn main() {
         let rx = pending_rx.clone();
         std::thread::spawn(move || {
             while let Ok(job) = rx.recv() {
-                let thumbnail =
-                    images::thumbnail(&job.file, cell_size.height * 5, cell_size.width * 10);
+                let thumbnail = images::thumbnail(
+                    &job.file,
+                    term.cell_height * THUMBNAIL_SIZE,
+                    term.cell_width * THUMBNAIL_SIZE * 2,
+                );
                 job.tx.send((job.file, thumbnail)).unwrap();
             }
         });
@@ -39,20 +46,22 @@ fn main() {
     // Collect results from the threads.
 
     let mut failed = Vec::new();
-    let mut stdout = std::io::BufWriter::new(std::io::stdout().lock());
+    let mut renderer = render::Renderer::new(term, THUMBNAIL_SIZE);
 
     for job in jobs {
-        let (file, thumbnail) = job.recv().unwrap();
+        let (file, thumbnail) = job.recv()?;
 
         match thumbnail {
-            Ok(img) => term::render(&mut stdout, img.as_ref()).expect("Render image"),
+            Ok(img) => renderer.render(&img)?,
             Err(e) => failed.push((file, e)),
         }
     }
 
-    drop(stdout);
+    drop(renderer);
 
     for (file, err) in failed {
         eprintln!("{}: {}", file.display(), err);
     }
+
+    Ok(())
 }

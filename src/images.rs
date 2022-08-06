@@ -2,8 +2,14 @@ use image::{DynamicImage, RgbImage};
 use std::path::Path;
 use turbojpeg::Subsamp;
 
+pub struct Thumbnail {
+    pub height: u32,
+    pub width: u32,
+    pub pixels: Vec<u8>,
+}
+
 /// Load an image from a file and returns the contents of a thumbnail.
-pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::Result<Vec<u8>> {
+pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::Result<Thumbnail> {
     let image = load_file(path)?;
 
     let thumbnail = DynamicImage::ImageRgb8(image).thumbnail(height, width);
@@ -13,7 +19,13 @@ pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::R
         Subsamp::None,
     )?;
 
-    Ok(buf.as_ref().into())
+    let pixels = buf.as_ref().into();
+
+    Ok(Thumbnail {
+        height: thumbnail.height(),
+        width: thumbnail.width(),
+        pixels,
+    })
 }
 
 fn load_file<P: AsRef<Path>>(path: &P) -> anyhow::Result<RgbImage> {
