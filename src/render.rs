@@ -1,6 +1,8 @@
 use crate::images::Thumbnail;
 use crate::term::Term;
+
 use std::io::{self, Write};
+use std::path::Path;
 
 pub struct Renderer<T> {
     output: T,
@@ -28,7 +30,7 @@ impl<T: Write> Renderer<T> {
         }
     }
 
-    pub fn render(&mut self, img: &Thumbnail) -> io::Result<()> {
+    pub fn render(&mut self, path: &Path, img: &Thumbnail) -> io::Result<()> {
         // Compute size in cells.
         let width = img.width / self.term.cell_width;
         let height = img.height / self.term.cell_height;
@@ -41,6 +43,10 @@ impl<T: Write> Renderer<T> {
             write!(&mut self.output, "\x1B8\x1B[{}C", self.row_offset_x)?;
         }
 
+        // Hyperlink to the path.
+        write!(&mut self.output, "\x1B]8;;{}\x07", path.display())?;
+
+        // Send the thumbnail using iTerm2 protocol.
         self.output.write_all(b"\x1B]1337;File=inline=1:")?;
 
         let mut b64 = base64::write::EncoderWriter::new(&mut self.output, base64::STANDARD);
@@ -48,7 +54,10 @@ impl<T: Write> Renderer<T> {
         b64.finish()?;
         drop(b64);
 
-        self.output.write_all(b"\x07")?;
+        // Finish both image and hyperlink.
+        self.output.write_all(b"\x07\x1B]8;;\x07")?;
+
+        // Update row position.
 
         self.row_offset_x += width + 1;
 

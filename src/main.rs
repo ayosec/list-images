@@ -8,7 +8,7 @@ use std::path::PathBuf;
 const THUMBNAIL_SIZE: u32 = 5;
 
 struct Job {
-    file: PathBuf,
+    path: PathBuf,
     tx: crossbeam_channel::Sender<(PathBuf, anyhow::Result<Thumbnail>)>,
 }
 
@@ -24,11 +24,11 @@ fn main() -> anyhow::Result<()> {
         std::thread::spawn(move || {
             while let Ok(job) = rx.recv() {
                 let thumbnail = images::thumbnail(
-                    &job.file,
+                    &job.path,
                     term.cell_height * THUMBNAIL_SIZE,
                     term.cell_width * THUMBNAIL_SIZE * 2,
                 );
-                job.tx.send((job.file, thumbnail)).unwrap();
+                job.tx.send((job.path, thumbnail)).unwrap();
             }
         });
     }
@@ -36,9 +36,12 @@ fn main() -> anyhow::Result<()> {
     let jobs: Vec<_> = std::env::args_os()
         .skip(1)
         .map(|file| {
-            let file = PathBuf::from(file);
+            let path = PathBuf::from(file);
+            let path = path.canonicalize().unwrap_or(path);
+
             let (tx, rx) = crossbeam_channel::unbounded();
-            pending_tx.send(Job { file, tx }).unwrap();
+            pending_tx.send(Job { path, tx }).unwrap();
+
             rx
         })
         .collect();
@@ -49,18 +52,18 @@ fn main() -> anyhow::Result<()> {
     let mut renderer = render::Renderer::new(term, THUMBNAIL_SIZE);
 
     for job in jobs {
-        let (file, thumbnail) = job.recv()?;
+        let (path, thumbnail) = job.recv()?;
 
         match thumbnail {
-            Ok(img) => renderer.render(&img)?,
-            Err(e) => failed.push((file, e)),
+            Ok(img) => renderer.render(&path, &img)?,
+            Err(e) => failed.push((path, e)),
         }
     }
 
     drop(renderer);
 
-    for (file, err) in failed {
-        eprintln!("{}: {}", file.display(), err);
+    for (path, err) in failed {
+        eprintln!("{}: {}", path.display(), err);
     }
 
     Ok(())
