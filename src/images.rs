@@ -10,7 +10,18 @@ pub struct Thumbnail {
 
 /// Load an image from a file and returns the contents of a thumbnail.
 pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::Result<Thumbnail> {
-    let image = load_file(path)?;
+    let image = match load_file(path) {
+        Ok(i) => i,
+        Err(e) => {
+            // If the file can't be parsed as an image, try to capture a frame
+            // with ffmpeg.
+            if let Ok(frame) = crate::ffmpeg::get_frame(path.as_ref()) {
+                image::load_from_memory(&frame)?.into_rgb8()
+            } else {
+                return Err(e);
+            }
+        }
+    };
 
     let thumbnail = DynamicImage::ImageRgb8(image).thumbnail(height, width);
     let buf = turbojpeg::compress_image(

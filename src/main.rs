@@ -1,3 +1,4 @@
+mod ffmpeg;
 mod images;
 mod render;
 mod term;
