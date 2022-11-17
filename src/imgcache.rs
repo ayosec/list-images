@@ -1,6 +1,8 @@
 //! Keep a cache of generated thumbnails.
 
 use std::env;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
@@ -51,7 +53,11 @@ impl Cache {
 
     pub fn store(&self, path: &Path, thumbnail: &Thumbnail) {
         if let Some(cached_path) = self.file_hash(path) {
-            let _ = std::fs::write(cached_path, &thumbnail.pixels);
+            let _ = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(cached_path)
+                .and_then(|mut file| file.write_all(&thumbnail.pixels));
         }
     }
 
