@@ -1,5 +1,6 @@
 mod ffmpeg;
 mod images;
+mod imgcache;
 mod render;
 mod term;
 
@@ -7,6 +8,7 @@ use clap::Parser;
 use images::Thumbnail;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Parser)]
 pub struct Args {
@@ -47,19 +49,33 @@ fn main() -> anyhow::Result<()> {
 
     let term = term::Term::new()?;
 
+    let cache = Arc::new(imgcache::Cache::new(args.thumbnail_size));
+
     // Launch multiple threads to create the thumbnails.
 
     let (pending_tx, pending_rx) = crossbeam_channel::unbounded::<Job>();
 
     for _ in 0..num_cpus::get() {
         let rx = pending_rx.clone();
+        let cache = Arc::clone(&cache);
         std::thread::spawn(move || {
             while let Ok(job) = rx.recv() {
-                let thumbnail = images::thumbnail(
-                    &job.path,
-                    term.cell_height * args.thumbnail_size,
-                    term.cell_width * args.thumbnail_size * 2,
-                );
+                let thumbnail = Option::as_ref(&cache)
+                    .and_then(|c| c.get(&job.path).map(Ok))
+                    .unwrap_or_else(|| {
+                        let thumbnail = images::thumbnail(
+                            &job.path,
+                            term.cell_height * args.thumbnail_size,
+                            term.cell_width * args.thumbnail_size * 2,
+                        );
+
+                        if let (Some(cache), Ok(thumbnail)) = (cache.as_ref(), &thumbnail) {
+                            cache.store(&job.path, thumbnail);
+                        }
+
+                        thumbnail
+                    });
+
                 job.tx.send((job.path, thumbnail)).unwrap();
             }
         });
