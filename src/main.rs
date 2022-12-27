@@ -109,7 +109,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    drop(renderer);
+    renderer.finish()?;
 
     for (path, err) in failed {
         eprintln!("{}: {}", path.display(), err);

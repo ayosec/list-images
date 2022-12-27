@@ -82,6 +82,14 @@ impl<'a, T: Write> Renderer<'a, T> {
         Ok(())
     }
 
+    pub fn finish(mut self) -> io::Result<()> {
+        if self.row_height > 0 {
+            write!(&mut self.output, "\x1B8\x1B[{}B", self.row_height)?;
+        }
+
+        Ok(())
+    }
+
     fn start_row(&mut self) -> io::Result<()> {
         if self.row_height > 0 {
             write!(&mut self.output, "\x1B8\x1B[{}B", self.args.thumbnail_size)?;
