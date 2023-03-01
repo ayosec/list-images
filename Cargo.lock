@@ -463,7 +463,7 @@ checksum = "505e71a4706fa491e9b1b55f51b95d4037d0821ee40131190475f692b35b009b"
 
 [[package]]
 name = "list-images"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64",
