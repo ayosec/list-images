@@ -44,10 +44,10 @@ pub fn get_frame(path: &Path) -> anyhow::Result<Vec<u8>> {
     // processing time.
     let data = run(Command::new("ffmpeg")
         .args(["-loglevel", "error"])
-        .arg("-i")
-        .arg(path)
         .arg("-ss")
         .arg(format!("{}", duration * DEFAULT_THUMBNAIL_SEEK / 100.))
+        .arg("-i")
+        .arg(path)
         .args(["-vframes", "1"])
         .args(["-c:v", "ppm"])
         .args(["-f", "image2"])
