@@ -2,6 +2,9 @@ use image::{DynamicImage, RgbImage};
 use std::path::Path;
 use turbojpeg::Subsamp;
 
+/// Maximum size for image files (32M).
+const MAX_IMAGE_FILE_SIZE: u64 = 32 << 20;
+
 pub struct Thumbnail {
     pub height: u32,
     pub width: u32,
@@ -40,6 +43,20 @@ pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::R
 }
 
 fn load_file<P: AsRef<Path>>(path: &P) -> anyhow::Result<RgbImage> {
+    let metadata = std::fs::metadata(path.as_ref())?;
+
+    if metadata.len() > MAX_IMAGE_FILE_SIZE {
+        anyhow::bail!(
+            "File exceeds the maximum size ({} > {})",
+            metadata.len(),
+            MAX_IMAGE_FILE_SIZE
+        );
+    }
+
+    if !metadata.is_file() {
+        anyhow::bail!("Expected a regular file");
+    }
+
     let data = std::fs::read(path.as_ref())?;
 
     // If this file is identified as a JPEG, try to load it with turbojpeg. If
