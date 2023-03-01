@@ -28,8 +28,6 @@ impl Cache {
             path.join(env!("CARGO_PKG_NAME"))
         };
 
-        std::fs::create_dir_all(&cache_dir).ok()?;
-
         Some(Cache {
             thumbnail_size,
             cache_dir,
@@ -53,6 +51,12 @@ impl Cache {
 
     pub fn store(&self, path: &Path, thumbnail: &Thumbnail) {
         if let Some(cached_path) = self.file_hash(path) {
+            if let Some(parent) = cached_path.parent() {
+                if std::fs::create_dir_all(parent).is_err() {
+                    return;
+                }
+            }
+
             let _ = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -72,7 +76,8 @@ impl Cache {
         hash.update(metadata.dev().to_ne_bytes());
         hash.update(metadata.ino().to_ne_bytes());
 
-        let filename = hex::encode(hash.finalize());
-        Some(self.cache_dir.join(filename))
+        let hash = hex::encode(hash.finalize());
+        let (prefix, filename) = hash.split_at(2);
+        Some(self.cache_dir.join(prefix).join(filename))
     }
 }
