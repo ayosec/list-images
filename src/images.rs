@@ -1,5 +1,5 @@
 use image::{DynamicImage, RgbImage};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use turbojpeg::Subsamp;
 
 /// Maximum size for image files (32M).
@@ -11,17 +11,44 @@ pub struct Thumbnail {
     pub pixels: Vec<u8>,
 }
 
+pub enum Source<'a> {
+    Path(PathBuf),
+    Mem(&'a [u8], PathBuf),
+}
+
+impl Source<'_> {
+    pub fn path(&self) -> &Path {
+        match self {
+            Source::Path(path) => path,
+            Source::Mem(_, path) => path,
+        }
+    }
+
+    pub fn into_path_buf(self) -> PathBuf {
+        match self {
+            Source::Path(path) => path,
+            Source::Mem(_, path) => path,
+        }
+    }
+}
+
 /// Load an image from a file and returns the contents of a thumbnail.
-pub fn thumbnail<P: AsRef<Path>>(path: &P, height: u32, width: u32) -> anyhow::Result<Thumbnail> {
-    let image = match load_file(path) {
-        Ok(i) => i,
-        Err(e) => {
-            // If the file can't be parsed as an image, try to capture a frame
-            // with ffmpeg.
-            if let Ok(frame) = crate::ffmpeg::get_frame(path.as_ref()) {
-                image::load_from_memory(&frame)?.into_rgb8()
-            } else {
-                return Err(e);
+pub fn thumbnail(source: &Source, height: u32, width: u32) -> anyhow::Result<Thumbnail> {
+    let image = match source {
+        Source::Mem(mem, _) => image::load_from_memory(mem)?.into_rgb8(),
+
+        Source::Path(ref path) => {
+            match load_file(path) {
+                Ok(i) => i,
+                Err(e) => {
+                    // If the file can't be parsed as an image, try to capture a frame
+                    // with ffmpeg.
+                    if let Ok(frame) = crate::ffmpeg::get_frame(path.as_ref()) {
+                        image::load_from_memory(&frame)?.into_rgb8()
+                    } else {
+                        return Err(e);
+                    }
+                }
             }
         }
     };

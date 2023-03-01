@@ -3,6 +3,7 @@
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
@@ -66,15 +67,20 @@ impl Cache {
     }
 
     fn file_hash(&self, path: &Path) -> Option<PathBuf> {
-        let metadata = std::fs::metadata(path).ok()?;
         let mut hash = Sha224::new();
 
-        // Build a hash using data from the metadata.
         hash.update(self.thumbnail_size.to_ne_bytes());
-        hash.update(metadata.len().to_ne_bytes());
-        hash.update(metadata.mtime().to_ne_bytes());
-        hash.update(metadata.dev().to_ne_bytes());
-        hash.update(metadata.ino().to_ne_bytes());
+
+        if let Ok(metadata) = std::fs::metadata(path) {
+            // Build a hash using data from the metadata.
+            hash.update(metadata.len().to_ne_bytes());
+            hash.update(metadata.mtime().to_ne_bytes());
+            hash.update(metadata.dev().to_ne_bytes());
+            hash.update(metadata.ino().to_ne_bytes());
+        } else {
+            // If metadata is not available, use the full path.
+            hash.update(path.as_os_str().as_bytes());
+        }
 
         let hash = hex::encode(hash.finalize());
         let (prefix, filename) = hash.split_at(2);

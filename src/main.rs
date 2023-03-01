@@ -1,3 +1,4 @@
+mod archives;
 mod ffmpeg;
 mod images;
 mod imgcache;
@@ -5,7 +6,7 @@ mod render;
 mod term;
 
 use clap::Parser;
-use images::Thumbnail;
+use images::{Source, Thumbnail};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -58,25 +59,10 @@ fn main() -> anyhow::Result<()> {
     for _ in 0..num_cpus::get() {
         let rx = pending_rx.clone();
         let cache = Arc::clone(&cache);
+        let thumbnail_size = args.thumbnail_size;
         std::thread::spawn(move || {
             while let Ok(job) = rx.recv() {
-                let thumbnail = Option::as_ref(&cache)
-                    .and_then(|c| c.get(&job.path).map(Ok))
-                    .unwrap_or_else(|| {
-                        let thumbnail = images::thumbnail(
-                            &job.path,
-                            term.cell_height * args.thumbnail_size,
-                            term.cell_width * args.thumbnail_size * 2,
-                        );
-
-                        if let (Some(cache), Ok(thumbnail)) = (cache.as_ref(), &thumbnail) {
-                            cache.store(&job.path, thumbnail);
-                        }
-
-                        thumbnail
-                    });
-
-                job.tx.send((job.path, thumbnail)).unwrap();
+                process_job(job, Option::as_ref(&cache), &term, thumbnail_size);
             }
         });
     }
@@ -101,11 +87,11 @@ fn main() -> anyhow::Result<()> {
     let mut renderer = render::Renderer::new(term, &args);
 
     for job in jobs {
-        let (path, thumbnail) = job.recv()?;
-
-        match thumbnail {
-            Ok(img) => renderer.render(&path, &img)?,
-            Err(e) => failed.push((path, e)),
+        while let Ok((path, thumbnail)) = job.recv() {
+            match thumbnail {
+                Ok(img) => renderer.render(&path, &img)?,
+                Err(e) => failed.push((path, e)),
+            }
         }
     }
 
@@ -116,4 +102,51 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn process_job(job: Job, cache: Option<&imgcache::Cache>, term: &term::Term, thumbnail_size: u32) {
+    // Try to open the file as an archive.
+    if let Ok(archive) = archives::open(&job.path) {
+        for entry in archive {
+            let path = job.path.join(entry.name);
+            render_file(
+                Source::Mem(&entry.data, path),
+                &job.tx,
+                cache,
+                term,
+                thumbnail_size,
+            );
+        }
+
+        return;
+    }
+
+    let Job { path, tx } = job;
+    render_file(Source::Path(path), &tx, cache, term, thumbnail_size);
+}
+
+fn render_file(
+    source: Source,
+    tx: &crossbeam_channel::Sender<(PathBuf, anyhow::Result<Thumbnail>)>,
+    cache: Option<&imgcache::Cache>,
+    term: &term::Term,
+    thumbnail_size: u32,
+) {
+    let thumbnail = cache
+        .and_then(|c| c.get(source.path()).map(Ok))
+        .unwrap_or_else(|| {
+            let thumbnail = images::thumbnail(
+                &source,
+                term.cell_height * thumbnail_size,
+                term.cell_width * thumbnail_size * 2,
+            );
+
+            if let (Some(cache), Ok(thumbnail)) = (cache.as_ref(), &thumbnail) {
+                cache.store(source.path(), thumbnail);
+            }
+
+            thumbnail
+        });
+
+    tx.send((source.into_path_buf(), thumbnail)).unwrap();
 }

@@ -5,6 +5,7 @@ use nix::errno::Errno;
 use nix::sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg, Termios};
 use nix::unistd;
 
+#[derive(Copy, Clone)]
 pub struct Term {
     pub columns: u32,
     pub cell_height: u32,
