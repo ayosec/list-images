@@ -27,6 +27,10 @@ pub struct Args {
     /// Color to set foreground for hyperlinks.
     #[clap(short = 'c', long, value_parser = parse_color, default_value = "FF7700")]
     hyperlink_color: [u8; 3],
+
+    /// Maximum file size to try to read.
+    #[clap(short = 'm', long, value_parser = parse_size)]
+    max_file_size: Option<u64>,
 }
 
 fn parse_color(value: &str) -> Result<[u8; 3], &'static str> {
@@ -38,6 +42,11 @@ fn parse_color(value: &str) -> Result<[u8; 3], &'static str> {
     }
 
     Err("Expected RRGGBB in hexadecimal digits.")
+}
+
+fn parse_size(value: &str) -> Result<u64, String> {
+    let bs: bytesize::ByteSize = value.parse()?;
+    Ok(bs.as_u64())
 }
 
 struct Job {
@@ -62,7 +71,13 @@ fn main() -> anyhow::Result<()> {
         let thumbnail_size = args.thumbnail_size;
         std::thread::spawn(move || {
             while let Ok(job) = rx.recv() {
-                process_job(job, Option::as_ref(&cache), &term, thumbnail_size);
+                process_job(
+                    job,
+                    Option::as_ref(&cache),
+                    &term,
+                    thumbnail_size,
+                    args.max_file_size,
+                );
             }
         });
     }
@@ -104,7 +119,13 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn process_job(job: Job, cache: Option<&imgcache::Cache>, term: &term::Term, thumbnail_size: u32) {
+fn process_job(
+    job: Job,
+    cache: Option<&imgcache::Cache>,
+    term: &term::Term,
+    thumbnail_size: u32,
+    max_file_size: Option<u64>,
+) {
     // Try to open the file as an archive.
     if let Ok(archive) = archives::open(&job.path) {
         for entry in archive {
@@ -115,6 +136,7 @@ fn process_job(job: Job, cache: Option<&imgcache::Cache>, term: &term::Term, thu
                 cache,
                 term,
                 thumbnail_size,
+                max_file_size,
             );
         }
 
@@ -122,7 +144,14 @@ fn process_job(job: Job, cache: Option<&imgcache::Cache>, term: &term::Term, thu
     }
 
     let Job { path, tx } = job;
-    render_file(Source::Path(path), &tx, cache, term, thumbnail_size);
+    render_file(
+        Source::Path(path),
+        &tx,
+        cache,
+        term,
+        thumbnail_size,
+        max_file_size,
+    );
 }
 
 fn render_file(
@@ -131,6 +160,7 @@ fn render_file(
     cache: Option<&imgcache::Cache>,
     term: &term::Term,
     thumbnail_size: u32,
+    max_file_size: Option<u64>,
 ) {
     let thumbnail = cache
         .and_then(|c| c.get(source.path()).map(Ok))
@@ -139,6 +169,7 @@ fn render_file(
                 &source,
                 term.cell_height * thumbnail_size,
                 term.cell_width * thumbnail_size * 2,
+                max_file_size,
             );
 
             if let (Some(cache), Ok(thumbnail)) = (cache.as_ref(), &thumbnail) {

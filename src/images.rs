@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use turbojpeg::Subsamp;
 
 /// Maximum size for image files (32M).
-const MAX_IMAGE_FILE_SIZE: u64 = 32 << 20;
+const DEFAULT_MAX_IMAGE_FILE_SIZE: u64 = 32 << 20;
 
 pub struct Thumbnail {
     pub height: u32,
@@ -33,12 +33,17 @@ impl Source<'_> {
 }
 
 /// Load an image from a file and returns the contents of a thumbnail.
-pub fn thumbnail(source: &Source, height: u32, width: u32) -> anyhow::Result<Thumbnail> {
+pub fn thumbnail(
+    source: &Source,
+    height: u32,
+    width: u32,
+    max_size: Option<u64>,
+) -> anyhow::Result<Thumbnail> {
     let image = match source {
         Source::Mem(mem, _) => image::load_from_memory(mem)?.into_rgb8(),
 
         Source::Path(ref path) => {
-            match load_file(path) {
+            match load_file(path, max_size) {
                 Ok(i) => i,
                 Err(e) => {
                     // If the file can't be parsed as an image, try to capture a frame
@@ -69,14 +74,16 @@ pub fn thumbnail(source: &Source, height: u32, width: u32) -> anyhow::Result<Thu
     })
 }
 
-fn load_file<P: AsRef<Path>>(path: &P) -> anyhow::Result<RgbImage> {
+fn load_file<P: AsRef<Path>>(path: &P, max_size: Option<u64>) -> anyhow::Result<RgbImage> {
     let metadata = std::fs::metadata(path.as_ref())?;
 
-    if metadata.len() > MAX_IMAGE_FILE_SIZE {
+    let max_size = max_size.unwrap_or(DEFAULT_MAX_IMAGE_FILE_SIZE);
+
+    if metadata.len() > max_size {
         anyhow::bail!(
             "File exceeds the maximum size ({} > {})",
             metadata.len(),
-            MAX_IMAGE_FILE_SIZE
+            max_size
         );
     }
 
