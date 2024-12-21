@@ -31,6 +31,12 @@ pub struct Args {
     /// Maximum file size to try to read.
     #[clap(short = 'm', long, value_parser = parse_size)]
     max_file_size: Option<u64>,
+
+    /// Number of jobs to run simultaneously.
+    ///
+    /// By default, it uses the number of CPU available.
+    #[clap(short = 'j', long)]
+    jobs: Option<usize>,
 }
 
 fn parse_color(value: &str) -> Result<[u8; 3], &'static str> {
@@ -65,7 +71,7 @@ fn main() -> anyhow::Result<()> {
 
     let (pending_tx, pending_rx) = crossbeam_channel::unbounded::<Job>();
 
-    for _ in 0..num_cpus::get() {
+    for _ in 0..args.jobs.unwrap_or_else(|| num_cpus::get()) {
         let rx = pending_rx.clone();
         let cache = Arc::clone(&cache);
         let thumbnail_size = args.thumbnail_size;
