@@ -3,6 +3,7 @@
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::str;
 
 /// Default seek to generate thumbnails from a video.
 const DEFAULT_THUMBNAIL_SEEK: f64 = 10.;
@@ -11,30 +12,13 @@ pub fn get_frame(path: &Path) -> anyhow::Result<Vec<u8>> {
     // Get duration of the stream.
     let duration = run(Command::new("ffprobe")
         .args(["-loglevel", "error"])
-        .args(["-select_streams", "v:0"])
-        .args(["-show_entries", "stream=duration"])
-        .args(["-of", "flat"])
+        .args(["-show_entries", "format=duration"])
+        .args(["-print_format", "csv=print_section=0"])
         .arg(path))?;
 
-    let duration = 'duration: {
-        // Find a line like `streams.stream.0.duration="123.45"`
-        for line in std::str::from_utf8(&duration)?.split('\n') {
-            let mut parts = line.splitn(2, '=');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                if key.contains("duration") {
-                    let value: f64 = value
-                        .strip_prefix('"')
-                        .unwrap_or(value)
-                        .strip_suffix('"')
-                        .unwrap_or(value)
-                        .parse()?;
-
-                    break 'duration value;
-                }
-            }
-        }
-
-        anyhow::bail!("can't find duration from ffprobe");
+    let duration = match str::from_utf8(&duration).map(|s| s.trim().parse::<f64>()) {
+        Ok(Ok(d)) => d,
+        _ => anyhow::bail!("can't find duration from ffprobe"),
     };
 
     // Launch ffmpeg to get a frame from the file at the `seek_percent`
