@@ -1,5 +1,6 @@
 use crate::images::Thumbnail;
 use crate::term::Term;
+use base64::engine::general_purpose::STANDARD;
 
 use std::io::{self, Write};
 use std::path::Path;
@@ -59,7 +60,7 @@ impl<'a, T: Write> Renderer<'a, T> {
         // Send the thumbnail using iTerm2 protocol.
         self.output.write_all(b"\x1B]1337;File=inline=1:")?;
 
-        let mut b64 = base64::write::EncoderWriter::new(&mut self.output, base64::STANDARD);
+        let mut b64 = base64::write::EncoderWriter::new(&mut self.output, &STANDARD);
         b64.write_all(&img.pixels)?;
         b64.finish()?;
         drop(b64);

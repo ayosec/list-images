@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::os::unix::prelude::RawFd;
 
 use anyhow::bail;
@@ -19,26 +20,29 @@ struct RawMode(Termios);
 
 impl RawMode {
     fn new() -> nix::Result<Self> {
-        let attrs = tcgetattr(STDIO)?;
+        let stdout = std::io::stdout();
+        let attrs = tcgetattr(&stdout)?;
 
         let mut change = attrs.clone();
         change.local_flags.remove(LocalFlags::ICANON);
         change.local_flags.remove(LocalFlags::ECHO);
 
-        tcsetattr(STDIO, SetArg::TCSAFLUSH, &change)?;
+        tcsetattr(stdout, SetArg::TCSAFLUSH, &change)?;
         Ok(RawMode(attrs))
     }
 }
 
 impl Drop for RawMode {
     fn drop(&mut self) {
-        let _ = tcsetattr(STDIO, SetArg::TCSADRAIN, &self.0);
+        let stdout = std::io::stdout();
+        let _ = tcsetattr(stdout, SetArg::TCSADRAIN, &self.0);
     }
 }
 
 impl Term {
     pub fn new() -> anyhow::Result<Self> {
-        if unistd::isatty(STDIO) != Ok(true) {
+        let stdout = std::io::stdout();
+        if !stdout.is_terminal() {
             bail!("Not a TTY");
         }
 
@@ -50,7 +54,7 @@ impl Term {
         // Query the terminal and wait until we have at least the DA1 response.
         let mut write = &b"\x1B[14t\x1B[18t\x1B[c"[..];
         while !write.is_empty() {
-            write = match unistd::write(STDIO, write) {
+            write = match unistd::write(&stdout, write) {
                 Ok(w) => &write[w..],
                 Err(e) => bail!("Failed to query data: {}", e),
             };
