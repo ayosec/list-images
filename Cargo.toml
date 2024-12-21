@@ -25,6 +25,7 @@ turbojpeg = { version = "0.5.4", features = ["image"] }
 [profile.release]
 debug = true
 overflow-checks = true
+split-debuginfo = "unpacked"
 
 [profile.dist]
 codegen-units = 1
